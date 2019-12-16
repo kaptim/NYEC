@@ -1,0 +1,190 @@
+#######################
+### Neural network ####
+#######################
+
+graphics.off() # close all plots
+rm(list=ls()) # remove all objects from from the current workspace (R memory)
+
+source("../Scripts/Neural_network_functions.R")
+
+library(tidyverse)
+
+load("../Data/data.RData")
+colnames(df) = seq(1,ncol(df))
+# removing the column names
+
+
+
+# --------------------------PRETREATMENT --------------------------------
+
+# we use the logistic acitvation function, so sigma(max) - sigma(min) = 1
+# since: [sigma(max), sigma(min)] = [0,1]
+
+# since the formula is the same for X and y, we can implement it before splitting it into X and y
+# we just have to remember that y is the fourth column
+
+maxs <- apply(df, 2, max) 
+mins <- apply(df, 2, min)
+
+data = df
+
+sigmax = 1
+sigmin = 0
+
+sigdiff = sigmax-sigmin
+# for better reusability
+
+for (i in 1:nrow(data)){
+  
+  for (j in 1:ncol(data)){
+    
+    data[i,j] = ((sigdiff)/(maxs[j]-mins[j]))*(data[i,j] - mins[j]) + sigmin
+    
+  }
+}
+
+# there are also some values which are zero because sigmin is also zero
+
+X = as.matrix(data[ , -4])
+
+y = data[ ,4]
+
+n = length(y)
+
+
+
+input_layer_size  = 65
+hidden_layer_size = 15
+lambda = 0
+
+dim(X)
+
+# initiate thetas as random numbers around zero (as starting values)
+# how we initialise them is taken from the neural networks chapter in Andrew Ng's Stanford CS 229
+# course (link at the beginning of the slides for neural methods)
+# have different numbers for theta 1 and theta 2 -> different seeds
+
+# number of neurons can be chosen at random
+
+set.seed(100)
+val1 = rnorm((66*15), mean = 0, sd = 0.1)
+set.seed(50)
+val2 = rnorm(16, mean = 0, sd = 0.1)
+
+Theta1 = matrix(val1, nrow = 15, ncol = 66)
+Theta2 = matrix(val2, nrow = 1, ncol = 16)
+
+# Theta1: 15x66, Theta2: 1x16
+dim(Theta1)
+
+nn_params = c(as.vector(Theta1),as.vector(Theta2))
+
+
+# regMSE computes the loss function (regularised MSE)
+# regMSE_grad calculates the gradient
+
+J = regMSE(nn_params, input_layer_size, hidden_layer_size, X, y, lambda)
+grad = regMSE_grad(nn_params, input_layer_size, hidden_layer_size, X, y, lambda)
+
+
+# empty containers
+# numerical gradient calculation as an comparison to the gradient calculated by the function
+
+
+numgrad = rep(0, length(nn_params))
+perturb = rep(0, length(nn_params))
+epsilon = 1e-6
+
+for (p in 1:100) {
+
+perturb[p] = epsilon
+J_perturb = regMSE(nn_params + perturb, input_layer_size, hidden_layer_size,
+                   X, y, lambda)
+
+numgrad[p] = (J_perturb - J) / epsilon
+perturb[p] = 0
+}
+
+
+Error_gradient = sqrt(sum((numgrad[1:100]-grad[1:100])^2))   / sqrt(sum((numgrad[1:100]+grad[1:100])^2))
+
+# This error is quite small so until here, the calculation seems to be correct
+
+
+
+# --------------------------------Training ------------------------------------------
+# Use the function regMSE to train the neural network to the regression using the weights 
+# Theta1 and Theta2
+
+lambda = 1
+
+options = list(trace=1, iter.max=100) # print every iteration
+
+# miminimses J by "going" to the place where the gradient equals zero
+
+backprop_result = nlminb(nn_params, objective=regMSE,
+                   gradient = regMSE_grad, hessian = NULL,
+                   input_layer_size=input_layer_size, hidden_layer_size=hidden_layer_size,
+                   X=X, y=y, lambda=lambda,
+                   control = options)
+nn_params_backprop = backprop_result$par
+cost = backprop_result$objective
+
+
+
+
+#----------------------Computing the final outcome and the error--------------------
+
+Theta1_backprop = matrix(nn_params_backprop[1: (hidden_layer_size * (input_layer_size + 1))],
+                         nrow = hidden_layer_size)
+
+Theta2_backprop = matrix(nn_params_backprop[(1 + (hidden_layer_size * (input_layer_size + 1))):length(nn_params_backprop)], 
+                         nrow = 1)
+
+
+
+X_ANN = t(X)
+X_ANN = rbind( matrix(1,nrow=1,ncol=n), X_ANN)
+a2 = sigmoid(Theta1_backprop %*% X_ANN)
+a22 = rbind(matrix(1,nrow=1,ncol=n), a2)
+
+a3 = sigmoid(Theta2_backprop %*% a22)
+
+
+# one cannot really rescale a3 since one does not know all values which one would
+# need in the reversed scaling formula
+# this means that the MSE seems quite low but this must be compared to the plot (below)
+
+
+MSE = mean((y - a3)^2)
+MAE = mean(abs(y - a3))
+RMSE = sqrt(MSE)
+
+
+# MSE:  0.01079655
+# MAE:  0.08278993
+# RMSE: 0.1039065
+
+
+
+# ------------------------------------------Plotting-------------------------------------
+
+days = seq(1,nrow(X))
+
+
+plot(x = days, y = y, type = "p", ylab = "Electricity consumption", xlab = "Days",
+     col = "dodgerblue3", pch = 16, cex = 0.5)
+lines(x = days, y = a3, col = "lightcoral")
+
+
+# As one can see, the neural network hardly reacts to changes but does not show a lot of predictive power
+# if  one comments out the scaling (what one should not normally do if the training is long but
+# our training is flawed so one can), then one will see a quite big error
+
+meanTSS = mean( (y - mean(y))^2 )
+meanRSS = mean(  (y - a3)^2 )
+R2 = 1 - meanRSS/meanTSS
+
+# R2 = 0.6736709
+
+# The R2 verifies this result.
