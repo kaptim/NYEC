@@ -1,0 +1,144 @@
+#############################################
+######### Neural network functions ###########
+#############################################
+
+# Activation function (sigmoid)
+
+sigmoid = function(z) {
+
+x = 1 / (1 + exp(-z))
+
+return(x)
+}
+
+
+regMSE = function (nn_params, input_layer_size, hidden_layer_size, 
+                                 X, y, lambda) {
+  # Computes the neural network cost function for a two layer
+  # neural network which performs regression using backpropagation.
+  # nn_params contains Theta1 and Theta2 in vectorized form, which needs to converted
+  
+  # Reshape nn_params back into the parameters Theta1 and Theta2, the weight matrices
+  # for our 2 layer neural network
+  
+  Theta1 = matrix(nn_params[1:(hidden_layer_size * (input_layer_size + 1))],
+                  nrow=hidden_layer_size)
+  
+  Theta2 = matrix(nn_params[(1 + (hidden_layer_size * (input_layer_size + 1))):length(nn_params)],
+                  nrow=1)
+  
+  n = dim(X)[1]
+  
+  J = 0
+  Theta1_grad = matrix(0,dim(Theta1)[1],dim(Theta1)[2])
+  Theta2_grad = matrix(0,dim(Theta2)[1],dim(Theta2)[2])
+
+  y_new = y
+  
+  X = cbind(rep(1,n), X)
+  
+  ###
+  H1 = sigmoid(X %*% t(Theta1))
+  H2 = cbind(rep(1,n), H1)
+  H = sigmoid(H2 %*% t(Theta2))
+  
+  # Regularised MSE
+  
+  J = vector()
+  
+  for (i in 1:n){
+    J[i] = ((y_new[i] - H[i])^2)
+    + (lambda/(2*n)) * (sum(sum( Theta1[, 2:dim(Theta1)[2] ]^2)) +  sum(sum( Theta2[, 2:dim(Theta2)[2] ]^2)) ) 
+  }
+  
+  J_new = sum(J)/(2*n)
+  J = J_new
+}
+
+
+regMSE_grad = function (nn_params, input_layer_size, hidden_layer_size,
+                        X, y, lambda) {
+  # Computes the neural network gradient for a two layer
+  # neural network which performs regression using backpropagation.
+  # nn_params contains theta1 and theta2 in vectorized form
+  
+  # Reshape nn_params back into the parameters Theta1 and Theta2, the weight matrices
+  # for our 2 layer neural network
+  
+  
+  Theta1 = matrix(nn_params[1:(hidden_layer_size * (input_layer_size + 1))],
+                  nrow=hidden_layer_size)
+  
+  Theta2 = matrix(nn_params[(1 + (hidden_layer_size * (input_layer_size + 1))):length(nn_params)],
+                  nrow=1)
+  
+  n = dim(X)[1]
+  
+  #J = 0
+  Theta1_grad = matrix(0,dim(Theta1)[1],dim(Theta1)[2])
+  Theta2_grad = matrix(0,dim(Theta2)[1],dim(Theta2)[2])
+  
+  y_new = y
+  
+  X = cbind(rep(1,n), X)
+  
+  # Implement the backpropagation algorithm to compute the gradients
+  
+  # empty containers first
+  # 2 layers -> up until a3
+  
+  a_2 = matrix(0,hidden_layer_size, 1)
+  a_2 = rbind( 1 , a_2)
+  a_3 = matrix(0, 1, 1)
+  
+  z_2 = matrix(0,hidden_layer_size, 1)
+  z_3 = matrix(0,1, 1)
+  
+  D1 = matrix(0,hidden_layer_size,input_layer_size + 1)
+  D2 = matrix(0,1,hidden_layer_size + 1)
+  
+  
+  for (t in 1:n) {
+    
+    # t = 1
+    # t = 730
+    # forward pass
+    # one element (day in our case)
+    
+    a_1 = X[t, ]
+    z_2 = Theta1 %*% a_1
+    a_2 = sigmoid(z_2)
+    a_2 = rbind(1, a_2)
+    
+    z_3 = Theta2 %*% a_2
+    a_3 = sigmoid(z_3)
+    
+    
+    # backwards pass
+    # compute delta (step 1) -> terminal error
+    # only thing which changes with regression
+    
+    tmp1 = a_3 - y_new[t]
+    
+    d3 = tmp1 * a_3 * (1-a_3)
+    
+    # formula of delta i (first part)
+    
+    tmp = ( t(Theta2) %*% d3)
+    
+    d2 =  tmp[2:length(tmp)] * sigmoid(z_2) * (1 - sigmoid(z_2))
+    
+    # the deltas (step 2)
+    # three layers -> two calculations
+    
+    D1 = D1 + d2 %*% a_1
+    D2 = D2 + d3 %*% t(a_2)   
+  }
+  
+  Theta1_grad = D1/n
+  Theta1_grad[, 2:dim(Theta1_grad)[2]] = Theta1_grad[, 2:dim(Theta1_grad)[2]] + (lambda/n) * Theta1[,2:dim(Theta1_grad)[2]]
+  Theta2_grad = D2/n
+  Theta2_grad[, 2:dim(Theta2_grad)[2]] = Theta2_grad[, 2:dim(Theta2_grad)[2]] + (lambda/n) * Theta2[,2:dim(Theta2_grad)[2]]
+  
+  grad = c(as.vector(Theta1_grad), as.vector(Theta2_grad))
+}
